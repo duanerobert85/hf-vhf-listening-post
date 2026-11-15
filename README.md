@@ -1,9 +1,8 @@
 # HF/VHF Portable Listening Post
 
-Raspberry Pi 3 Model B • NESDR SMArt • MHS35 • Sabrent USB DAC
+Raspberry Pi 3 Model B • NESDR SMArt • MHS35 3.5" Touchscreen • Sabrent USB DAC
 
-Dedicated scanner running PiScan backend + custom pygame framebuffer GUI.
-No desktop environment.
+Dedicated vehicle-mounted scanner. No desktop. PiScan backend + pygame framebuffer GUI.
 
 ## Quick start on the Pi
 
@@ -11,7 +10,24 @@ No desktop environment.
 git clone https://github.com/duanerobert85/hf-vhf-listening-post.git
 cd hf-vhf-listening-post
 chmod +x scripts/*.sh
-sudo ./scripts/bringup.sh
+
+# Install packages
+sudo ./scripts/install-deps.sh
+
+# Install display (reboots)
+sudo ./scripts/install-display.sh
+
+# After reboot: configure audio
+./scripts/setup-alsa.sh
+# Edit and copy config/asound.conf.template to /etc/asound.conf
+
+# Build PiScan (see docs/piscan-build.md)
+# Copy config/systems.example.json to PiScan data/systems.json
+
+# Install services
+sudo cp systemd/*.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable piscan.service scanner-gui.service
 ```
 
-See `docs/` and the workshop PDF for full details.
+Full workshop manual: see HF_VHF_Listening_Post_Manual.pdf in this repository.

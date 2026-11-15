@@ -1,0 +1,14 @@
+# Copy to /etc/asound.conf after confirming card number with aplay -l
+# Adjust card number if Sabrent is not card 1
+
+defaults.pcm.card 1
+defaults.ctl.card 1
+
+pcm.!default {
+    type hw
+    card 1
+}
+ctl.!default {
+    type hw
+    card 1
+}
