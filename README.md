@@ -4,30 +4,34 @@ Raspberry Pi 3 Model B • NESDR SMArt • MHS35 3.5" Touchscreen • Sabrent US
 
 Dedicated vehicle-mounted scanner. No desktop. PiScan backend + pygame framebuffer GUI.
 
-## Quick start on the Pi
+## One-shot install (recommended)
 
 ```bash
 git clone https://github.com/duanerobert85/hf-vhf-listening-post.git
 cd hf-vhf-listening-post
-chmod +x scripts/*.sh
-
-# Install packages
-sudo ./scripts/install-deps.sh
-
-# Install display (reboots)
-sudo ./scripts/install-display.sh
-
-# After reboot: configure audio
-./scripts/setup-alsa.sh
-# Edit and copy config/asound.conf.template to /etc/asound.conf
-
-# Build PiScan (see docs/piscan-build.md)
-# Copy config/systems.example.json to PiScan data/systems.json
-
-# Install services
-sudo cp systemd/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable piscan.service scanner-gui.service
+chmod +x scripts/one-shot-install.sh
+./scripts/one-shot-install.sh
 ```
 
-Full workshop manual: see HF_VHF_Listening_Post_Manual.pdf in this repository.
+The script will:
+- Update the system and install all dependencies
+- Install the MHS35 display driver
+- Build PiScan with the ALSA audio backend
+- Install systemd service units
+- Copy an example systems.json
+
+After it finishes:
+1. Reboot (`sudo reboot`) so the display framebuffer is active
+2. Configure `/etc/asound.conf` for the Sabrent DAC (see the script output and `config/asound.conf.template`)
+3. Edit `~/PiScan/data/systems.json` with your frequencies
+4. Enable the services:
+   ```bash
+   sudo systemctl enable piscan.service scanner-gui.service
+   sudo systemctl start piscan.service scanner-gui.service
+   ```
+
+## Manual steps (if preferred)
+
+See the individual scripts in `scripts/` and `docs/` for step-by-step control.
+
+Full workshop manual PDF is available from the original project conversation.
