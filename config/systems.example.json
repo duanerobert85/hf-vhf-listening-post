@@ -1,0 +1,25 @@
+{
+  "systems": [
+    {
+      "systype": "analog",
+      "tag": "Local VHF Example",
+      "lockout": false,
+      "channels": [
+        {
+          "tag": "Fire Dispatch",
+          "lockout": false,
+          "delay": 2000,
+          "freq": 154280000,
+          "chantype": "fmc"
+        },
+        {
+          "tag": "Weather",
+          "lockout": false,
+          "delay": 1000,
+          "freq": 162550000,
+          "chantype": "fmc"
+        }
+      ]
+    }
+  ]
+}

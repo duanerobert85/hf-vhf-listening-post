@@ -1,0 +1,14 @@
+[Unit]
+Description=PiScan Scanner Server
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/PiScan/data
+ExecStart=/usr/local/bin/piscan_server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
