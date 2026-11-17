@@ -5,7 +5,8 @@
 #
 # Usage: chmod +x one-shot-install.sh && ./one-shot-install.sh
 
-set -e
+set -u
+# Do NOT use set -e globally — we want to continue past non-fatal steps
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -14,20 +15,22 @@ NC='\033[0m'
 
 info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Detect user and home
 USER_NAME=$(whoami)
 HOME_DIR=$(eval echo ~$USER_NAME)
 REPO_DIR="$HOME_DIR/hf-vhf-listening-post"
 PISCAN_DIR="$HOME_DIR/PiScan"
+PISCAN_BIN="$PISCAN_DIR/build/piscan_server"
+DATA_DIR="$PISCAN_DIR/data"
 
-info "Starting one-shot install for user: $USER_NAME"
+info "Starting one-shot install for user: $USER_NAME ($HOME_DIR)"
 
 # 1. System update
 info "Updating system packages..."
-sudo apt update
-sudo apt full-upgrade -y
+sudo apt update || warn "apt update failed"
+sudo apt full-upgrade -y || warn "apt upgrade failed"
 
 # 2. Install dependencies
 info "Installing build and runtime dependencies..."
@@ -37,75 +40,117 @@ sudo apt install -y \
   soapysdr-module-rtlsdr librtlsdr0 \
   libasound2-dev protobuf-compiler libprotoc-dev \
   python3-pygame python3-protobuf \
-  evtest alsa-utils fbi
+  evtest alsa-utils fbi \
+|| warn "Some packages failed to install"
 
 # 3. Display driver (MHS35)
 info "Installing MHS35 display driver..."
 if [ ! -d "$HOME_DIR/LCD-show" ]; then
-  git clone https://github.com/goodtft/LCD-show.git "$HOME_DIR/LCD-show"
+  git clone https://github.com/goodtft/LCD-show.git "$HOME_DIR/LCD-show" || warn "LCD-show clone failed"
 fi
-cd "$HOME_DIR/LCD-show"
-chmod -R 755 .
-sudo ./MHS35-show || warn "MHS35-show returned non-zero (may still be OK)"
+if [ -d "$HOME_DIR/LCD-show" ]; then
+  cd "$HOME_DIR/LCD-show"
+  chmod -R 755 . || true
+  sudo ./MHS35-show || warn "MHS35-show returned non-zero (may still be OK)"
+else
+  warn "LCD-show directory missing, skipping display driver"
+fi
 
-warn "Display driver installed. A reboot is recommended before continuing with GUI tests."
-warn "You can continue now or reboot and re-run this script (it is safe to re-run)."
+warn "Display driver step finished. A reboot is recommended before GUI tests."
 
-# 4. Clone or update this repo (if not already present)
+# 4. Clone or update this repo
 if [ ! -d "$REPO_DIR" ]; then
   info "Cloning listening-post repository..."
-  git clone https://github.com/duanerobert85/hf-vhf-listening-post.git "$REPO_DIR"
+  git clone https://github.com/duanerobert85/hf-vhf-listening-post.git "$REPO_DIR" || error "Failed to clone repo"
 else
   info "Repository already present, pulling latest..."
-  cd "$REPO_DIR" && git pull || true
+  (cd "$REPO_DIR" && git pull) || warn "git pull failed"
 fi
 
 # 5. Build PiScan with ALSA
 info "Building PiScan (ALSA backend)..."
 if [ ! -d "$PISCAN_DIR" ]; then
-  git clone https://github.com/ezratl/PiScan.git "$PISCAN_DIR"
+  git clone https://github.com/ezratl/PiScan.git "$PISCAN_DIR" || error "Failed to clone PiScan"
 fi
-cd "$PISCAN_DIR"
-if [ -f configure_make ]; then
-  sh ./configure_make || true
-fi
-mkdir -p build
-cd build
-cmake .. -DUSE_AUDIO_ALSA=ON
-make -j$(nproc) piscan_server || make piscan_server
-info "PiScan built. Binary is at $PISCAN_DIR/build/piscan_server"
 
-# Optional install
-# sudo make install
+if [ -d "$PISCAN_DIR" ]; then
+  cd "$PISCAN_DIR"
+  if [ -f configure_make ]; then
+    info "Running configure_make..."
+    sh ./configure_make || warn "configure_make had errors (continuing)"
+  fi
+  mkdir -p build data
+  cd build
+  info "Running cmake with ALSA..."
+  cmake .. -DUSE_AUDIO_ALSA=ON || warn "cmake failed"
+  info "Building piscan_server..."
+  make -j$(nproc) piscan_server || make piscan_server || warn "make failed"
+  if [ -f "$PISCAN_BIN" ]; then
+    info "PiScan binary built: $PISCAN_BIN"
+  else
+    warn "PiScan binary not found at $PISCAN_BIN"
+  fi
+else
+  warn "PiScan directory missing, skipping build"
+fi
 
 # 6. Prepare data directory and example systems.json
 info "Preparing PiScan data directory..."
-mkdir -p "$PISCAN_DIR/data"
-if [ ! -f "$PISCAN_DIR/data/systems.json" ]; then
-  cp "$REPO_DIR/config/systems.example.json" "$PISCAN_DIR/data/systems.json"
+mkdir -p "$DATA_DIR"
+if [ -f "$REPO_DIR/config/systems.example.json" ] && [ ! -f "$DATA_DIR/systems.json" ]; then
+  cp "$REPO_DIR/config/systems.example.json" "$DATA_DIR/systems.json"
   info "Copied example systems.json"
 fi
 
-# 7. Install systemd services
+# 7. Install systemd services with correct absolute paths (no empty WorkingDirectory)
 info "Installing systemd service units..."
-sudo cp "$REPO_DIR/systemd/piscan.service" /etc/systemd/system/
-sudo cp "$REPO_DIR/systemd/scanner-gui.service" /etc/systemd/system/
+if [ -d "$REPO_DIR/systemd" ]; then
+  # Write piscan.service with real paths
+  sudo tee /etc/systemd/system/piscan.service > /dev/null <<EOF
+[Unit]
+Description=PiScan Scanner Server
+After=network.target sound.target
 
-# Fix paths in the service files if needed (they assume /home/pi)
-if [ "$HOME_DIR" != "/home/pi" ]; then
-  warn "Home is $HOME_DIR (not /home/pi). Editing service files..."
-  sudo sed -i "s|/home/pi|$HOME_DIR|g" /etc/systemd/system/piscan.service
-  sudo sed -i "s|/home/pi|$HOME_DIR|g" /etc/systemd/system/scanner-gui.service
+[Service]
+Type=simple
+User=$USER_NAME
+WorkingDirectory=$DATA_DIR
+ExecStart=$PISCAN_BIN
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  # Write scanner-gui.service
+  sudo tee /etc/systemd/system/scanner-gui.service > /dev/null <<EOF
+[Unit]
+Description=Scanner Touchscreen GUI
+After=piscan.service
+Requires=piscan.service
+
+[Service]
+Type=simple
+User=$USER_NAME
+WorkingDirectory=$REPO_DIR/gui
+Environment=SDL_FBDEV=/dev/fb1
+Environment=SDL_VIDEODRIVER=fbcon
+ExecStart=/usr/bin/python3 $REPO_DIR/gui/scanner_gui.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo systemctl daemon-reload || warn "daemon-reload failed"
+  info "Service files written to /etc/systemd/system/"
+  info "  WorkingDirectory=$DATA_DIR"
+  info "  ExecStart=$PISCAN_BIN"
+else
+  warn "systemd directory missing in repo, skipping service install"
 fi
-
-# Update ExecStart if we didn't do make install
-PISCAN_BIN="$PISCAN_DIR/build/piscan_server"
-if [ -f "$PISCAN_BIN" ]; then
-  sudo sed -i "s|ExecStart=.*|ExecStart=$PISCAN_BIN|" /etc/systemd/system/piscan.service
-  sudo sed -i "s|WorkingDirectory=.*|WorkingDirectory=$PISCAN_DIR/data|" /etc/systemd/system/piscan.service
-fi
-
-sudo systemctl daemon-reload
 
 # 8. ALSA guidance
 info "=== ALSA / Sabrent DAC setup (manual step) ==="
@@ -117,21 +162,21 @@ echo "  sudo nano /etc/asound.conf   # set the correct card number"
 echo "Test with: speaker-test -c 2 -t wav"
 echo "Save mixer: sudo alsactl store"
 
-# 9. Enable services (optional prompt)
-info "=== Services ==="
-echo "To enable automatic start on boot:"
-echo "  sudo systemctl enable piscan.service scanner-gui.service"
-echo "To start now (after display reboot and ALSA config):"
-echo "  sudo systemctl start piscan.service"
-echo "  sudo systemctl start scanner-gui.service"
-
-info "=== One-shot install complete ==="
+# 9. Final instructions
+info "=== One-shot install finished ==="
 echo ""
 echo "Next recommended steps:"
 echo "  1. Reboot so the MHS35 framebuffer is active: sudo reboot"
 echo "  2. Configure /etc/asound.conf for the Sabrent DAC"
-echo "  3. Edit $PISCAN_DIR/data/systems.json with your frequencies"
-echo "  4. Enable and start the services"
+echo "  3. Edit $DATA_DIR/systems.json with your frequencies"
+echo "  4. Enable and start the services (after binary exists):"
+echo "     sudo systemctl enable piscan.service scanner-gui.service"
+echo "     sudo systemctl start piscan.service"
+echo "     sudo systemctl start scanner-gui.service"
 echo "  5. Check logs: journalctl -u piscan -f"
 echo ""
+if [ ! -f "$PISCAN_BIN" ]; then
+  warn "PiScan binary was not built. You will need to fix the build before starting the service."
+  warn "Common next step: cd $PISCAN_DIR && sh ./configure_make && cd build && cmake .. -DUSE_AUDIO_ALSA=ON && make"
+fi
 info "Done."
