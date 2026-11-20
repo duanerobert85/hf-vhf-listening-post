@@ -37,7 +37,8 @@ info "Installing build and runtime dependencies..."
 sudo apt install -y \
   g++ git build-essential cmake \
   libboost-all-dev libliquid-dev \
-  soapysdr-module-rtlsdr librtlsdr0 \
+  libsoapysdr-dev soapysdr-module-rtlsdr soapysdr-tools \
+  librtlsdr0 \
   libasound2-dev protobuf-compiler libprotoc-dev \
   python3-pygame python3-protobuf \
   evtest alsa-utils fbi \
