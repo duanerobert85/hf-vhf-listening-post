@@ -53,8 +53,8 @@ else
   (cd "$REPO_DIR" && git pull) || warn "git pull failed"
 fi
 
-# 4. Build PiScan with ALSA
-info "Building PiScan (ALSA backend)..."
+# 4. Build PiScan with ALSA + newer liquid API
+info "Building PiScan (ALSA backend, liquid API new)..."
 if [ ! -d "$PISCAN_DIR" ]; then
   git clone https://github.com/ezratl/PiScan.git "$PISCAN_DIR" || error "Failed to clone PiScan"
 fi
@@ -67,8 +67,8 @@ if [ -d "$PISCAN_DIR" ]; then
   fi
   mkdir -p build data
   cd build
-  info "Running cmake with ALSA..."
-  cmake .. -DUSE_AUDIO_ALSA=ON || warn "cmake failed"
+  info "Running cmake with ALSA and LIQUID_API_OLD=OFF..."
+  cmake .. -DUSE_AUDIO_ALSA=ON -DLIQUID_API_OLD=OFF || warn "cmake failed"
   info "Building piscan_server..."
   make -j$(nproc) piscan_server || make piscan_server || warn "make failed"
   if [ -f "$PISCAN_BIN" ]; then
