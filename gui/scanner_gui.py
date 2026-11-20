@@ -1,28 +1,36 @@
 #!/usr/bin/env python3
 """
 Minimal scanner GUI skeleton for HDMI.
-Uses kmsdrm (modern Raspberry Pi OS) by default.
-Talks to PiScan on localhost:1234 (protobuf — to be implemented).
+Tries kmsdrm, then fbcon, then default.
 """
 import os
-# Prefer kmsdrm on Bookworm / modern Pi; fall back if needed
-os.environ.setdefault("SDL_VIDEODRIVER", "kmsdrm")
-
-import pygame
 import sys
+import pygame
 
-# Typical HDMI console resolution; adjust if needed
 WIDTH, HEIGHT = 800, 480
+
+def try_video():
+    drivers = ["kmsdrm", "fbcon", "x11", "wayland", ""]
+    for drv in drivers:
+        if drv:
+            os.environ["SDL_VIDEODRIVER"] = drv
+        else:
+            os.environ.pop("SDL_VIDEODRIVER", None)
+        try:
+            pygame.display.init()
+            screen = pygame.display.set_mode((WIDTH, HEIGHT))
+            print(f"Using video driver: {drv or 'default'}")
+            return screen
+        except pygame.error as e:
+            print(f"Driver {drv or 'default'} failed: {e}")
+            pygame.display.quit()
+    raise RuntimeError("No working SDL video driver found")
 
 def main():
     global WIDTH, HEIGHT
     pygame.init()
-    try:
-        screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    except pygame.error:
-        # Fallback
-        screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-        WIDTH, HEIGHT = screen.get_size()
+    screen = try_video()
+    WIDTH, HEIGHT = screen.get_size()
 
     pygame.display.set_caption("Scanner")
     font = pygame.font.Font(None, 48)
@@ -39,8 +47,6 @@ def main():
                 running = False
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 running = False
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                pass
 
         screen.fill((10, 20, 30))
         text = font.render(freq, True, (0, 255, 128))
@@ -48,7 +54,6 @@ def main():
         st = small.render(status, True, (255, 200, 0))
         screen.blit(st, (30, 130))
 
-        # Soft key bar
         bar_h = 50
         pygame.draw.rect(screen, (40, 40, 60), (0, HEIGHT - bar_h, WIDTH, bar_h))
         keys = ["SCAN", "HOLD", "MAN", "SQL"]
