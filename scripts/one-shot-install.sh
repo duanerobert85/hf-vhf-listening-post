@@ -21,7 +21,7 @@ USER_NAME=$(whoami)
 HOME_DIR=$(eval echo ~$USER_NAME)
 REPO_DIR="$HOME_DIR/hf-vhf-listening-post"
 PISCAN_DIR="$HOME_DIR/PiScan"
-PISCAN_BIN="$PISCAN_DIR/build/piscan_server"
+PISCAN_BIN="$PISCAN_DIR/build/src/piscan_server"
 DATA_DIR="$PISCAN_DIR/data"
 
 info "Starting one-shot install for user: $USER_NAME ($HOME_DIR)"
@@ -42,6 +42,7 @@ sudo apt install -y \
   libasound2-dev protobuf-compiler libprotoc-dev \
   python3-pygame python3-protobuf \
   evtest alsa-utils fbi \
+  libssl-dev \
 || warn "Some packages failed to install"
 
 # 3. Clone or update this repo
@@ -73,8 +74,8 @@ if [ -d "$PISCAN_DIR" ]; then
   info "Building Live555 (required for RTSP / liveMedia.hh)..."
   make live555 || warn "make live555 failed — you may need to install Live555 source manually"
 
-  info "Building piscan_server..."
-  make -j$(nproc) piscan_server || make piscan_server || warn "make failed"
+  info "Building piscan_server (single job to avoid OOM on Pi 3)..."
+  make -j1 piscan_server || warn "make failed"
   if [ -f "$PISCAN_BIN" ]; then
     info "PiScan binary built: $PISCAN_BIN"
   else
