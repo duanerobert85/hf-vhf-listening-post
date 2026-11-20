@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Minimal scanner GUI skeleton for HDMI framebuffer.
+Minimal scanner GUI skeleton for HDMI.
+Uses kmsdrm (modern Raspberry Pi OS) by default.
 Talks to PiScan on localhost:1234 (protobuf — to be implemented).
-Uses /dev/fb0 by default.
 """
 import os
-os.environ.setdefault("SDL_FBDEV", "/dev/fb0")
-os.environ.setdefault("SDL_VIDEODRIVER", "fbcon")
+# Prefer kmsdrm on Bookworm / modern Pi; fall back if needed
+os.environ.setdefault("SDL_VIDEODRIVER", "kmsdrm")
 
 import pygame
 import sys
@@ -20,7 +20,7 @@ def main():
     try:
         screen = pygame.display.set_mode((WIDTH, HEIGHT))
     except pygame.error:
-        # Fallback if resolution is different
+        # Fallback
         screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
         WIDTH, HEIGHT = screen.get_size()
 
@@ -40,7 +40,6 @@ def main():
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 running = False
             if event.type == pygame.MOUSEBUTTONDOWN:
-                # TODO: map touch/mouse to soft keys
                 pass
 
         screen.fill((10, 20, 30))

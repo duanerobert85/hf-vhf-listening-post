@@ -5,11 +5,10 @@ Requires=piscan.service
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/hf-vhf-listening-post/gui
-Environment=SDL_FBDEV=/dev/fb0
-Environment=SDL_VIDEODRIVER=fbcon
-ExecStart=/usr/bin/python3 /home/pi/hf-vhf-listening-post/gui/scanner_gui.py
+User=%i
+WorkingDirectory=/home/%i/hf-vhf-listening-post/gui
+Environment=SDL_VIDEODRIVER=kmsdrm
+ExecStart=/usr/bin/python3 /home/%i/hf-vhf-listening-post/gui/scanner_gui.py
 Restart=on-failure
 RestartSec=3
 
