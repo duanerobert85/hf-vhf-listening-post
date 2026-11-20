@@ -1,5 +1,5 @@
 [Unit]
-Description=Scanner Touchscreen GUI
+Description=Scanner HDMI GUI
 After=piscan.service
 Requires=piscan.service
 
@@ -7,9 +7,9 @@ Requires=piscan.service
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/hf-vhf-listening-post/gui
-Environment=SDL_FBDEV=/dev/fb1
+Environment=SDL_FBDEV=/dev/fb0
 Environment=SDL_VIDEODRIVER=fbcon
-ExecStart=/usr/bin/python3 scanner_gui.py
+ExecStart=/usr/bin/python3 /home/pi/hf-vhf-listening-post/gui/scanner_gui.py
 Restart=on-failure
 RestartSec=3
 

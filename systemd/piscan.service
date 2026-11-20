@@ -6,7 +6,7 @@ After=network.target sound.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/PiScan/data
-ExecStart=/usr/local/bin/piscan_server
+ExecStart=/home/pi/PiScan/build/piscan_server
 Restart=on-failure
 RestartSec=5
 
