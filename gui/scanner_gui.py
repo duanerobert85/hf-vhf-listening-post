@@ -15,6 +15,7 @@ import sys
 WIDTH, HEIGHT = 800, 480
 
 def main():
+    global WIDTH, HEIGHT
     pygame.init()
     try:
         screen = pygame.display.set_mode((WIDTH, HEIGHT))
