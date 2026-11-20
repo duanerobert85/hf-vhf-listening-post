@@ -1,71 +1,93 @@
 #!/usr/bin/env python3
 """
-Minimal scanner GUI skeleton for HDMI.
-Tries kmsdrm, then fbcon, then default.
+Minimal direct-framebuffer scanner GUI for HDMI console.
+No SDL/pygame — works as a systemd service on Raspberry Pi OS Trixie.
+Draws to /dev/fb0.
 """
 import os
 import sys
-import pygame
+import mmap
+import struct
+import time
+import fcntl
 
-WIDTH, HEIGHT = 800, 480
+# Framebuffer ioctl constants
+FBIOGET_VSCREENINFO = 0x4600
+FBIOGET_FSCREENINFO = 0x4602
 
-def try_video():
-    drivers = ["kmsdrm", "fbcon", "x11", "wayland", ""]
-    for drv in drivers:
-        if drv:
-            os.environ["SDL_VIDEODRIVER"] = drv
-        else:
-            os.environ.pop("SDL_VIDEODRIVER", None)
-        try:
-            pygame.display.init()
-            screen = pygame.display.set_mode((WIDTH, HEIGHT))
-            print(f"Using video driver: {drv or 'default'}")
-            return screen
-        except pygame.error as e:
-            print(f"Driver {drv or 'default'} failed: {e}")
-            pygame.display.quit()
-    raise RuntimeError("No working SDL video driver found")
+def get_fb_info(fd):
+    # Variable screen info
+    vinfo = bytearray(160)
+    fcntl.ioctl(fd, FBIOGET_VSCREENINFO, vinfo)
+    xres, yres, xres_virtual, yres_virtual, bits_per_pixel = struct.unpack_from('IIIIII', vinfo, 0)[:5]
+    # Fixed screen info
+    finfo = bytearray(80)
+    fcntl.ioctl(fd, FBIOGET_FSCREENINFO, finfo)
+    line_length = struct.unpack_from('I', finfo, 16)[0]
+    return xres, yres, bits_per_pixel, line_length
+
+def draw_pixel(fb, line_length, bpp, x, y, r, g, b):
+    if bpp == 16:
+        # RGB565
+        color = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+        offset = y * line_length + x * 2
+        fb[offset:offset+2] = struct.pack('H', color)
+    elif bpp == 32:
+        # BGRA or RGBA — most Pi framesbuffers are BGRA
+        offset = y * line_length + x * 4
+        fb[offset:offset+4] = bytes([b, g, r, 255])
+
+def fill_rect(fb, line_length, bpp, x, y, w, h, r, g, b):
+    for yy in range(y, y + h):
+        for xx in range(x, x + w):
+            draw_pixel(fb, line_length, bpp, xx, yy, r, g, b)
 
 def main():
-    global WIDTH, HEIGHT
-    pygame.init()
-    screen = try_video()
-    WIDTH, HEIGHT = screen.get_size()
+    fb_path = "/dev/fb0"
+    if not os.path.exists(fb_path):
+        print("No /dev/fb0 found. Enable the framebuffer console or check HDMI.")
+        sys.exit(1)
 
-    pygame.display.set_caption("Scanner")
-    font = pygame.font.Font(None, 48)
-    small = pygame.font.Font(None, 28)
+    fd = os.open(fb_path, os.O_RDWR)
+    xres, yres, bpp, line_length = get_fb_info(fd)
+    print(f"Framebuffer: {xres}x{yres} @ {bpp}bpp, line={line_length}")
 
-    clock = pygame.time.Clock()
-    running = True
+    size = yres * line_length
+    fb = mmap.mmap(fd, size, mmap.MAP_SHARED, mmap.PROT_WRITE | mmap.PROT_READ)
+
+    # Simple UI colors
+    bg = (10, 20, 30)
+    green = (0, 255, 128)
+    yellow = (255, 200, 0)
+    bar = (40, 40, 60)
+    white = (220, 220, 220)
+
     freq = "154.280 MHz"
     status = "SCAN"
 
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
+    try:
+        while True:
+            # Clear background
+            fill_rect(fb, line_length, bpp, 0, 0, xres, yres, *bg)
 
-        screen.fill((10, 20, 30))
-        text = font.render(freq, True, (0, 255, 128))
-        screen.blit(text, (30, 60))
-        st = small.render(status, True, (255, 200, 0))
-        screen.blit(st, (30, 130))
+            # Draw a simple frequency area (just a colored block for now)
+            fill_rect(fb, line_length, bpp, 30, 50, 400, 60, *green)
+            fill_rect(fb, line_length, bpp, 30, 130, 200, 40, *yellow)
 
-        bar_h = 50
-        pygame.draw.rect(screen, (40, 40, 60), (0, HEIGHT - bar_h, WIDTH, bar_h))
-        keys = ["SCAN", "HOLD", "MAN", "SQL"]
-        for i, k in enumerate(keys):
-            label = small.render(k, True, (220, 220, 220))
-            screen.blit(label, (20 + i * 160, HEIGHT - 35))
+            # Soft key bar
+            bar_h = 50
+            fill_rect(fb, line_length, bpp, 0, yres - bar_h, xres, bar_h, *bar)
+            # Key indicators
+            keys = ["SCAN", "HOLD", "MAN", "SQL"]
+            for i, k in enumerate(keys):
+                fill_rect(fb, line_length, bpp, 20 + i * 160, yres - 40, 120, 30, *white)
 
-        pygame.display.flip()
-        clock.tick(15)
-
-    pygame.quit()
-    sys.exit(0)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        fb.close()
+        os.close(fd)
 
 if __name__ == "__main__":
     main()
